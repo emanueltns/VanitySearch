@@ -27,6 +27,12 @@
 #include <string.h>
 #include <math.h>
 #include <algorithm>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <random>
+#include <numeric>
+#include <cmath>
 #ifndef WIN64
 #include <pthread.h>
 #endif
@@ -58,6 +64,7 @@ VanitySearch::VanitySearch(Secp256K1 *secp, vector<std::string> &inputPrefixes,s
   this->caseSensitive = caseSensitive;
   this->startPubKeySpecified = !startPubKey.isZero();
 
+
   lastRekey = 0;
   prefixes.clear();
 
@@ -69,10 +76,10 @@ VanitySearch::VanitySearch(Secp256K1 *secp, vector<std::string> &inputPrefixes,s
     prefixes.push_back(t);
 
   // Check is inputPrefixes contains wildcard character
-  for (int i = 0; i < (int)inputPrefixes.size() && !hasPattern; i++) {
-    hasPattern = ((inputPrefixes[i].find('*') != std::string::npos) ||
-                   (inputPrefixes[i].find('?') != std::string::npos) );
-  }
+  //for (int i = 0; i < (int)inputPrefixes.size() && !hasPattern; i++) {
+   //hasPattern = ((inputPrefixes[i].find('*') != std::string::npos) ||
+            //       (inputPrefixes[i].find('?') != std::string::npos) );
+ // }
 
   if (!hasPattern) {
 
@@ -298,13 +305,19 @@ VanitySearch::VanitySearch(Secp256K1 *secp, vector<std::string> &inputPrefixes,s
   }
 
   // Protect seed against "seed search attack" using pbkdf2_hmac_sha512
-  string salt = "VanitySearch";
-  unsigned char hseed[64];
-  pbkdf2_hmac_sha512(hseed, 64, (const uint8_t *)seed.c_str(), seed.length(),
-    (const uint8_t *)salt.c_str(), salt.length(),
-    2048);
-  startKey.SetInt32(0);
-  sha256(hseed, 64, (unsigned char *)startKey.bits64);
+  //string salt = "VanitySearch";
+  //unsigned char hseed[64];
+  //pbkdf2_hmac_sha512(hseed, 64, (const uint8_t *)seed.c_str(), seed.length(),
+    //(const uint8_t *)salt.c_str(), salt.length(),
+    //2048);
+  //startKey.SetInt32(0);
+  //sha256(hseed, 64, (unsigned char *)startKey.bits64);
+  
+  startKey.SetBase16("20000000000000000");
+  endKey.SetBase16("2ffffffffffffffff");
+
+  cpuStartKey.SetBase16("30000000000000000");
+  cpuEndKey.SetBase16("3ffffffffffffffff");
 
   char *ctimeBuff;
   time_t now = time(NULL);
@@ -543,6 +556,7 @@ void VanitySearch::dumpPrefixes() {
 }
 // ----------------------------------------------------------------------------
 
+//first function called
 void VanitySearch::enumCaseUnsentivePrefix(std::string s, std::vector<std::string> &list) {
 
   char letter[64];
@@ -1264,14 +1278,25 @@ void VanitySearch::checkAddressesSSE(bool compressed,Int key, int i, Point p1, P
 
 // ----------------------------------------------------------------------------
 void VanitySearch::getCPUStartingKey(int thId,Int& key,Point& startP) {
+    Int diff;
+    diff.Sub(&cpuEndKey, &cpuStartKey);
+    Int threads(static_cast<uint64_t>(nbCPUThread));
 
+    Int blockSize; // This will hold the quotient of the division
+    blockSize.Set(&diff); // Copy result to quotient
+    blockSize.Div(&threads, nullptr); // Now quotient holds the result of the division    
+
+    //cpu key
   if (rekey > 0) {
     key.Rand(256);
   } else {
     key.Set(&startKey);
-    Int off((int64_t)thId);
-    off.ShiftL(64);
-    key.Add(&off);
+   // Int off((int64_t)thId);
+   // off.ShiftL(64);
+   // key.Add(&off);
+    Int result;
+    result.Mult(&blockSize, static_cast<uint64_t>(thId));
+    key.Add(&result);
   }
   Int km(&key);
   km.Add((uint64_t)CPU_GRP_SIZE / 2);
@@ -1476,28 +1501,88 @@ void VanitySearch::FindKeyCPU(TH_PARAM *ph) {
 
 }
 
-// ----------------------------------------------------------------------------
+std::string get_combination(unsigned long long index, const std::string& allowed_chars, int length) {
+    std::string result;
+    result.reserve(length);
 
-void VanitySearch::getGPUStartingKeys(int thId, int groupSize, int nbThread, Int *keys, Point *p) {
-
-  for (int i = 0; i < nbThread; i++) {
-    if (rekey > 0) {
-      keys[i].Rand(256);
-    } else {
-      keys[i].Set(&startKey);
-      Int offT((uint64_t)i);
-      offT.ShiftL(80);
-      Int offG((uint64_t)thId);
-      offG.ShiftL(112);
-      keys[i].Add(&offT);
-      keys[i].Add(&offG);
+    for (int i = 0; i < length; ++i) {
+        result.push_back(allowed_chars[index % allowed_chars.size()]);
+        index /= allowed_chars.size();
     }
+
+    std::reverse(result.begin(), result.end());
+
+    return result;
+}
+
+std::pair<std::string, std::string> get_ranges(const std::string& initial, int count, const std::string& allowed_chars) {
+    std::string string1;
+    std::string string2;
+    unsigned long long num_combinations = pow(allowed_chars.size(), count);
+    std::vector<unsigned long long> indices(num_combinations);
+    std::iota(indices.begin(), indices.end(), 0);  // Fill with consecutive integers starting from 0
+
+    std::random_device rd;  // Random number generator
+    std::mt19937 gen(rd());
+
+   
+    std::uniform_int_distribution<> dis(0, indices.size() - 1);
+    int random_index = dis(gen);
+
+    unsigned long long chosen_index = indices[random_index];
+    indices.erase(indices.begin() + random_index);  // Remove this index from the list
+
+    std::string merged_string = initial + get_combination(chosen_index, allowed_chars, count);
+
+    string1 = merged_string;
+    string1.resize(17, '0');
+
+    string2 = merged_string;
+    string2.resize(17, 'f');
+    
+
+    return { string1, string2 };
+}
+
+
+// ----------------------------------------------------------------------------
+//todo create a method which generates a random private key based on the logic already defined and convert it to an int, becasue that one is a hex
+//todo when running, tekey should be > 0 in order to generate multiple keys
+void VanitySearch::getGPUStartingKeys(int thId, int groupSize, int nbThread, Int *keys, Point *p) {
+    printf("No of threads: %d\n", nbThread);
+
+    Int diff;
+    diff.Sub(&endKey, &startKey);
+    Int threads(static_cast<uint64_t>(nbThread));
+
+    Int blockSize; // This will hold the quotient of the division
+    blockSize.Set(&diff); // Copy result to quotient
+    blockSize.Div(&threads, nullptr); // Now quotient holds the result of the division    
+    
+  
+  for (int i = 0; i < nbThread; i++) {
+
+    if (rekey > 0) {
+        keys[i].Rand(256);
+    } else {
+        keys[i].Set(&startKey);
+        //Int offT((uint64_t)i);
+        //offT.ShiftL(80);
+        //Int offG((uint64_t)thId);
+        //offG.ShiftL(112);
+        //keys[i].Add(&offT);
+        //keys[i].Add(&offG);
+        Int result;
+        result.Mult(&blockSize, static_cast<uint64_t>(i));
+        keys[i].Add(&result);
+    }
+
     Int k(keys + i);
     // Starting key is at the middle of the group
     k.Add((uint64_t)(groupSize / 2));
     p[i] = secp->ComputePublicKey(&k);
-    if (startPubKeySpecified)
-      p[i] = secp->AddDirect(p[i], startPubKey);
+   // if (startPubKeySpecified)
+   //   p[i] = secp->AddDirect(p[i], startPubKey);
   }
 
 }

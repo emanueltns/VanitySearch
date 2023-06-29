@@ -170,7 +170,6 @@ void Secp256K1::Check() {
 
 
 Point Secp256K1::ComputePublicKey(Int *privKey) {
-
   int i = 0;
   uint8_t b;
   Point Q;

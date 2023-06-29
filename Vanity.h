@@ -107,6 +107,9 @@ private:
 
   Secp256K1 *secp;
   Int startKey;
+  Int endKey;
+  Int cpuStartKey;
+  Int cpuEndKey;
   Point startPubKey;
   bool startPubKeySpecified;
   uint64_t counters[256];

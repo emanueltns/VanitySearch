@@ -400,6 +400,8 @@ int main(int argc, char* argv[]) {
   bool startPubKeyCompressed;
   bool caseSensitive = true;
   bool paranoiacSeed = false;
+  string startPrivKey = "";
+  string endPrivKey = "";
 
   while (a < argc) {
 
@@ -416,9 +418,20 @@ int main(int argc, char* argv[]) {
     } else if (strcmp(argv[a], "-c") == 0) {
       caseSensitive = false;
       a++;
-    } else if (strcmp(argv[a], "-v") == 0) {
-      printf("%s\n",RELEASE);
-      exit(0);
+    }
+    else if (strcmp(argv[a], "-v") == 0) {
+        printf("%s\n", RELEASE);
+        exit(0);
+    }
+    else if (strcmp(argv[a], "-kr") == 0) {
+        a++;
+        // Split the argument on the comma to get startKey and endKey
+        char* keyRange = strtok(argv[a], ":");
+        char* startKey = strdup(keyRange);
+        char* endKey = strdup(strtok(NULL, ":"));
+        startPrivKey = startKey;
+        endPrivKey = endKey;
+        a++;
     } else if (strcmp(argv[a], "-check") == 0) {
 
       Int::Check();
