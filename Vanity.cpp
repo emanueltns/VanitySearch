@@ -314,10 +314,10 @@ VanitySearch::VanitySearch(Secp256K1 *secp, vector<std::string> &inputPrefixes,s
   //sha256(hseed, 64, (unsigned char *)startKey.bits64);
   
   startKey.SetBase16("20000000000000000");
-  endKey.SetBase16("2ffffffffffffffff");
+  endKey.SetBase16("3ffffffffffffffff");
 
-  cpuStartKey.SetBase16("30000000000000000");
-  cpuEndKey.SetBase16("3ffffffffffffffff");
+ // cpuStartKey.SetBase16("30000000000000000");
+ // cpuEndKey.SetBase16("3ffffffffffffffff");
 
   char *ctimeBuff;
   time_t now = time(NULL);
@@ -1279,7 +1279,7 @@ void VanitySearch::checkAddressesSSE(bool compressed,Int key, int i, Point p1, P
 // ----------------------------------------------------------------------------
 void VanitySearch::getCPUStartingKey(int thId,Int& key,Point& startP) {
     Int diff;
-    diff.Sub(&cpuEndKey, &cpuStartKey);
+    diff.Sub(&endKey, &startKey);
     Int threads(static_cast<uint64_t>(nbCPUThread));
 
     Int blockSize; // This will hold the quotient of the division
@@ -1492,7 +1492,19 @@ void VanitySearch::FindKeyCPU(TH_PARAM *ph) {
 
     }
 
-    key.Add((uint64_t)CPU_GRP_SIZE);
+    Int newKey(key);
+
+    // Add the step size to the new key
+    newKey.Add((uint64_t)CPU_GRP_SIZE);
+
+    // If the new key would be greater than the end key, end the search
+    if (newKey.IsGreater(&endKey)) {
+        endOfSearch = true;
+        break;
+    }
+
+    // Otherwise, update the key to the new key
+    key.Set(&newKey);
     counters[thId]+= 6*CPU_GRP_SIZE; // Point + endo #1 + endo #2 + Symetric point + endo #1 + endo #2
 
   }
@@ -1549,7 +1561,7 @@ std::pair<std::string, std::string> get_ranges(const std::string& initial, int c
 //todo create a method which generates a random private key based on the logic already defined and convert it to an int, becasue that one is a hex
 //todo when running, tekey should be > 0 in order to generate multiple keys
 void VanitySearch::getGPUStartingKeys(int thId, int groupSize, int nbThread, Int *keys, Point *p) {
-    printf("No of threads: %d\n", nbThread);
+    //printf("No of threads: %d\n", nbThread);
 
     Int diff;
     diff.Sub(&endKey, &startKey);
@@ -1575,11 +1587,14 @@ void VanitySearch::getGPUStartingKeys(int thId, int groupSize, int nbThread, Int
         Int result;
         result.Mult(&blockSize, static_cast<uint64_t>(i));
         keys[i].Add(&result);
+      
     }
 
     Int k(keys + i);
+   // printf("k adds keys: %s", k.GetBase16().c_str());
     // Starting key is at the middle of the group
     k.Add((uint64_t)(groupSize / 2));
+  //  printf("k adds group /2: %s", k.GetBase16().c_str());
     p[i] = secp->ComputePublicKey(&k);
    // if (startPubKeySpecified)
    //   p[i] = secp->AddDirect(p[i], startPubKey);
@@ -1645,8 +1660,22 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
 
     if (ok) {
       for (int i = 0; i < nbThread; i++) {
-        keys[i].Add((uint64_t)STEP_SIZE);
+          // Create a copy of the key at position i
+          Int newKey(keys[i]);
+          // Add the step size to the new key
+          newKey.Add((uint64_t)STEP_SIZE);
+
+          // If the new key would be greater than the end key, end the search
+           if (newKey.IsGreater(&endKey)) {
+                endOfSearch = true;
+                break;
+           }
+
+          // Otherwise, update the key to the new key
+          keys[i].Set(&newKey);
+         //  keys[i].Add((uint64_t)STEP_SIZE);
       }
+
       counters[thId] += 6ULL * STEP_SIZE * nbThread; // Point +  endo1 + endo2 + symetrics
     }
 
