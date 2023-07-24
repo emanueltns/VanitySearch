@@ -1603,6 +1603,7 @@ void VanitySearch::getGPUStartingKeys(int thId, int groupSize, int nbThread, Int
 void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
 
   bool ok = true;
+  int index = 0;
 
 #ifdef WITHGPU
 
@@ -1640,6 +1641,7 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
   // GPU Thread
   while (ok && !endOfSearch) {
 
+
     if (ph->rekeyRequest) {
       getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p);
       ok = g.SetKeys(p);
@@ -1655,27 +1657,16 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
     }
 
     if (ok) {
-        // Create the upperLimit array before the loop
-        std::unique_ptr<Int[]> upperLimits(new Int[nbThread]);
-
+        index++;
         for (int i = 0; i < nbThread; i++) {
-            std::string keyHex = keys[i].GetBase16();
-            std::string dynamicPart = keyHex.substr(0, keyHex.size() - 6); // Exclude the last 6 chars
-
-            std::string str = dynamicPart + "ffffff";
-            char* mutable_str = new char[str.length() + 1];
-            strcpy(mutable_str, str.c_str());
-
-            upperLimits[i].SetBase16(mutable_str);
-            delete[] mutable_str;
-        }
-
-        for (int i = 0; i < nbThread; i++) {
-            Int incrementedKey = keys[i];
-            incrementedKey.Add((uint64_t)STEP_SIZE);
-
-            if (incrementedKey.IsGreater(&upperLimits[i]) > 0) {
+           /* Int incrementedKey = keys[i];
+            incrementedKey.Add((uint64_t)STEP_SIZE);*/
+            //std::cout << "Added step size = 1024: incremented key " << incrementedKey.GetBase16() << std::endl;
+           /* std::cout << "index " << index << std::endl;*/
+            if (index > 16384) {
+                std::cout << "greater than 16384 " << index << std::endl;
                 getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p);
+                index = 0;
                 break;
             }
             else {
