@@ -1664,7 +1664,7 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
             //std::cout << "Added step size = 1024: incremented key " << incrementedKey.GetBase16() << std::endl;
             //std::cout << "index " << index << std::endl;
             if (index > 16384) {
-                //std::cout << "greater than 16384 " << index << std::endl;
+                std::cout << "greater than 16384 " << index << std::endl;
                 getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p);
                 index = 0;
                 break;
