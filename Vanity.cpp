@@ -36,6 +36,7 @@
 #include <sstream>
 #include <iomanip>
 #include <array>
+#include <cstring>
 #ifndef WIN64
 #include <pthread.h>
 #endif
@@ -1663,7 +1664,7 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
 
             std::string str = dynamicPart + "ffffff";
             char* mutable_str = new char[str.length() + 1];
-            std::strcpy(mutable_str, str.c_str());
+            strcpy(mutable_str, str.c_str());
 
             upperLimits[i].SetBase16(mutable_str);
             delete[] mutable_str;
