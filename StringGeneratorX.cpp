@@ -1,12 +1,12 @@
-// StringGenerator.cpp
-#include "StringGenerator.h"
+#include "StringGeneratorX.h"
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <cmath>
 
 StringGenerator::StringGenerator(const std::string& initial, int count)
     : initial_(initial), count_(count), gen_(std::random_device{}()), dis_(0, std::pow(16, count) - 1) {
-    reset();
+    resetStr();
 }
 
 std::string StringGenerator::toHex(unsigned long long num) {
@@ -15,7 +15,7 @@ std::string StringGenerator::toHex(unsigned long long num) {
     return ss.str();
 }
 
-void StringGenerator::reset() {
+void StringGenerator::resetStr() {
     unsigned long long start = dis_(gen_);
     unsigned long long end = dis_(gen_);
     if (start > end) std::swap(start, end);
@@ -27,9 +27,9 @@ void StringGenerator::reset() {
     end_ = initial_ + middle_end + "ffffffff";
 }
 
-std::string StringGenerator::next() {
+std::string StringGenerator::nextStr() {
     if (current_ > end_) {
-        reset();
+        resetStr();
     }
 
     // Convert suffix of current_ to an integer

@@ -4,13 +4,13 @@
 #include <string>
 #include <random>
 #include <sstream>
-#include <iomanip>
+
 
 class StringGenerator {
 public:
     StringGenerator(const std::string& initial, int count);
-    std::string next();
-    void reset();
+    std::string nextStr();
+    void resetStr();
 
 private:
     std::string initial_;

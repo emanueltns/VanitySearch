@@ -33,6 +33,9 @@
 #include <random>
 #include <numeric>
 #include <cmath>
+#include <sstream>
+#include <iomanip>
+#include <array>
 #ifndef WIN64
 #include <pthread.h>
 #endif
@@ -314,7 +317,6 @@ VanitySearch::VanitySearch(Secp256K1 *secp, vector<std::string> &inputPrefixes,s
   //sha256(hseed, 64, (unsigned char *)startKey.bits64);
   
   startKey.SetBase16("20000000000000000");
-  endKey.SetBase16("3ffffffffffffffff");
 
  // cpuStartKey.SetBase16("30000000000000000");
  // cpuEndKey.SetBase16("3ffffffffffffffff");
@@ -899,7 +901,6 @@ void VanitySearch::checkAddrSSE(uint8_t *h1, uint8_t *h2, uint8_t *h3, uint8_t *
 
   }
 
-
 }
 
 void VanitySearch::checkAddr(int prefIdx, uint8_t *hash160, Int &key, int32_t incr, int endomorphism, bool mode) {
@@ -1276,27 +1277,75 @@ void VanitySearch::checkAddressesSSE(bool compressed,Int key, int i, Point p1, P
 
 }
 
-// ----------------------------------------------------------------------------
-void VanitySearch::getCPUStartingKey(int thId,Int& key,Point& startP) {
-    Int diff;
-    diff.Sub(&endKey, &startKey);
-    Int threads(static_cast<uint64_t>(nbCPUThread));
 
-    Int blockSize; // This will hold the quotient of the division
-    blockSize.Set(&diff); // Copy result to quotient
-    blockSize.Div(&threads, nullptr); // Now quotient holds the result of the division    
+// global variables
+int count_global = 0;
+
+std::mt19937 gen_global(std::random_device{}());
+std::uniform_int_distribution<int> dis_global(0, 15);
+
+std::string initial_global = "2";
+std::string current_global, end_global;
+
+
+std::string generate_hex_prefix() {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distr(0, 15);
+
+    std::array<char, 16> allowed_chars{ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+    std::string hex_prefix(11, ' ');
+
+    // First char will be 2 or 3
+    hex_prefix[0] = '2';//distr(gen) < 8 ? '2' : '3';
+
+    // Next 8 chars will be randomly generated but with allowed chars
+    for (int i = 1; i < 11; ++i) {
+        hex_prefix[i] = allowed_chars[distr(gen)];
+    }
+
+    return hex_prefix;
+}
+
+std::string generate_hex_number(std::string& hex_prefix, unsigned& suffix) {
+    if (suffix == 0xffffff) {
+        hex_prefix = generate_hex_prefix();
+        suffix = 0;
+    }
+
+    std::stringstream ss;
+    ss << hex_prefix << std::setfill('0') << std::setw(6) << std::hex << suffix;
+    suffix++;
+
+    return ss.str();
+    //return "2123456789abc0000";
+}
+
+
+// ----------------------------------------------------------------------------
+void VanitySearch::getCPUStartingKey(int thId,Int& key,Point& startP) {  
+
+    unsigned suffix = 0;
+    std::string hex_prefix = generate_hex_prefix();
+    std::string hex_num = generate_hex_number(hex_prefix, suffix);
+    char* cstr = new char[hex_num.length() + 1];
+    std::strcpy(cstr, hex_num.c_str());
+
+
+    //std::cout << "CPUGenerated hex prefix: " << hex_prefix << std::endl;
+    //std::cout << "CPUGenerated hex number: " << hex_num << std::endl;
 
     //cpu key
   if (rekey > 0) {
     key.Rand(256);
+    std::cout << "rkey>0: " << rekey << std::endl;
   } else {
-    key.Set(&startKey);
-   // Int off((int64_t)thId);
-   // off.ShiftL(64);
-   // key.Add(&off);
-    Int result;
-    result.Mult(&blockSize, static_cast<uint64_t>(thId));
-    key.Add(&result);
+      key.SetBase16(cstr);
+    //key.Set(&startKey);
+ /*   Int off((int64_t)thId);
+    off.ShiftL(64);
+    key.Add(&off);*/
+    delete[] cstr;
   }
   Int km(&key);
   km.Add((uint64_t)CPU_GRP_SIZE / 2);
@@ -1487,24 +1536,22 @@ void VanitySearch::FindKeyCPU(TH_PARAM *ph) {
           checkAddresses(false, key, i, pts[i]);
           break;
         }
-
       }
-
     }
 
-    Int newKey(key);
+  //  Int newKey(key);
 
     // Add the step size to the new key
-    newKey.Add((uint64_t)CPU_GRP_SIZE);
+  //  newKey.Add((uint64_t)CPU_GRP_SIZE);
 
     // If the new key would be greater than the end key, end the search
-    if (newKey.IsGreater(&endKey)) {
-        endOfSearch = true;
-        break;
-    }
+  //  if (newKey.IsGreater(&endKey)) {
+  //      endOfSearch = true;
+  //      break;
+  //  }
 
     // Otherwise, update the key to the new key
-    key.Set(&newKey);
+    key.Add((uint64_t)CPU_GRP_SIZE);
     counters[thId]+= 6*CPU_GRP_SIZE; // Point + endo #1 + endo #2 + Symetric point + endo #1 + endo #2
 
   }
@@ -1513,88 +1560,38 @@ void VanitySearch::FindKeyCPU(TH_PARAM *ph) {
 
 }
 
-std::string get_combination(unsigned long long index, const std::string& allowed_chars, int length) {
-    std::string result;
-    result.reserve(length);
-
-    for (int i = 0; i < length; ++i) {
-        result.push_back(allowed_chars[index % allowed_chars.size()]);
-        index /= allowed_chars.size();
-    }
-
-    std::reverse(result.begin(), result.end());
-
-    return result;
-}
-
-std::pair<std::string, std::string> get_ranges(const std::string& initial, int count, const std::string& allowed_chars) {
-    std::string string1;
-    std::string string2;
-    unsigned long long num_combinations = pow(allowed_chars.size(), count);
-    std::vector<unsigned long long> indices(num_combinations);
-    std::iota(indices.begin(), indices.end(), 0);  // Fill with consecutive integers starting from 0
-
-    std::random_device rd;  // Random number generator
-    std::mt19937 gen(rd());
-
-   
-    std::uniform_int_distribution<> dis(0, indices.size() - 1);
-    int random_index = dis(gen);
-
-    unsigned long long chosen_index = indices[random_index];
-    indices.erase(indices.begin() + random_index);  // Remove this index from the list
-
-    std::string merged_string = initial + get_combination(chosen_index, allowed_chars, count);
-
-    string1 = merged_string;
-    string1.resize(17, '0');
-
-    string2 = merged_string;
-    string2.resize(17, 'f');
-    
-
-    return { string1, string2 };
-}
-
-
-// ----------------------------------------------------------------------------
-//todo create a method which generates a random private key based on the logic already defined and convert it to an int, becasue that one is a hex
-//todo when running, tekey should be > 0 in order to generate multiple keys
 void VanitySearch::getGPUStartingKeys(int thId, int groupSize, int nbThread, Int *keys, Point *p) {
-    //printf("No of threads: %d\n", nbThread);
-
-    Int diff;
-    diff.Sub(&endKey, &startKey);
-    Int threads(static_cast<uint64_t>(nbThread));
-
-    Int blockSize; // This will hold the quotient of the division
-    blockSize.Set(&diff); // Copy result to quotient
-    blockSize.Div(&threads, nullptr); // Now quotient holds the result of the division    
+    printf("No of threads: %d\n", nbThread);
+   
     
-  
   for (int i = 0; i < nbThread; i++) {
+      unsigned suffix = 0;
+      std::string hex_prefix = generate_hex_prefix();
+      std::string hex_num = generate_hex_number(hex_prefix, suffix);
+      char* cstr = new char[hex_num.length() + 1];
+      std::strcpy(cstr, hex_num.c_str());
 
+    /*  std::cout << "Generated hex prefix: " << hex_prefix << std::endl;*/
+      //std::cout << "Generated hex number: " << hex_num << std::endl;
     if (rekey > 0) {
         keys[i].Rand(256);
+        std::cout << "rkey>0: " << rekey << std::endl;
     } else {
-        keys[i].Set(&startKey);
-        //Int offT((uint64_t)i);
-        //offT.ShiftL(80);
-        //Int offG((uint64_t)thId);
-        //offG.ShiftL(112);
-        //keys[i].Add(&offT);
-        //keys[i].Add(&offG);
-        Int result;
-        result.Mult(&blockSize, static_cast<uint64_t>(i));
-        keys[i].Add(&result);
-      
+        //keys[i].Set(&startKey);
+        keys[i].SetBase16(cstr);
+        /*Int offT((uint64_t)i);
+        offT.ShiftL(80);
+        Int offG((uint64_t)thId);
+        offG.ShiftL(112);
+        keys[i].Add(&offT);
+        keys[i].Add(&offG);*/
+        delete[] cstr;
     }
 
     Int k(keys + i);
    // printf("k adds keys: %s", k.GetBase16().c_str());
     // Starting key is at the middle of the group
     k.Add((uint64_t)(groupSize / 2));
-  //  printf("k adds group /2: %s", k.GetBase16().c_str());
     p[i] = secp->ComputePublicKey(&k);
    // if (startPubKeySpecified)
    //   p[i] = secp->AddDirect(p[i], startPubKey);
@@ -1652,33 +1649,43 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
     ok = g.Launch(found);
 
     for(int i=0;i<(int)found.size() && !endOfSearch;i++) {
-
       ITEM it = found[i];
       checkAddr(*(prefix_t *)(it.hash), it.hash, keys[it.thId], it.incr, it.endo, it.mode);
-
     }
 
     if (ok) {
-      for (int i = 0; i < nbThread; i++) {
-          // Create a copy of the key at position i
-          Int newKey(keys[i]);
-          // Add the step size to the new key
-          newKey.Add((uint64_t)STEP_SIZE);
+        // Create the upperLimit array before the loop
+        std::unique_ptr<Int[]> upperLimits(new Int[nbThread]);
 
-          // If the new key would be greater than the end key, end the search
-           if (newKey.IsGreater(&endKey)) {
-                endOfSearch = true;
+        for (int i = 0; i < nbThread; i++) {
+            std::string keyHex = keys[i].GetBase16();
+            std::string dynamicPart = keyHex.substr(0, keyHex.size() - 6); // Exclude the last 6 chars
+
+            std::string str = dynamicPart + "ffffff";
+            char* mutable_str = new char[str.length() + 1];
+            std::strcpy(mutable_str, str.c_str());
+
+            upperLimits[i].SetBase16(mutable_str);
+            delete[] mutable_str;
+        }
+
+        for (int i = 0; i < nbThread; i++) {
+            Int incrementedKey = keys[i];
+            incrementedKey.Add((uint64_t)STEP_SIZE);
+
+            if (incrementedKey.IsGreater(&upperLimits[i]) > 0) {
+                getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p);
                 break;
-           }
+            }
+            else {
+                keys[i].Add((uint64_t)STEP_SIZE);
+            }
 
-          // Otherwise, update the key to the new key
-          keys[i].Set(&newKey);
-         //  keys[i].Add((uint64_t)STEP_SIZE);
-      }
-
-      counters[thId] += 6ULL * STEP_SIZE * nbThread; // Point +  endo1 + endo2 + symetrics
+            //keys[i].Add((uint64_t)STEP_SIZE);
+            //std::cout << "Added step size = 1024: current keys[i] " << keys[i].GetBase16() << std::endl;
+        }
+        counters[thId] += 6ULL * STEP_SIZE * nbThread; // Point +  endo1 + endo2 + symetrics
     }
-
   }
 
   delete[] keys;
@@ -1747,7 +1754,6 @@ uint64_t VanitySearch::getCPUCount() {
   for(int i=0;i<nbCPUThread;i++)
     count += counters[i];
   return count;
-
 }
 
 // ----------------------------------------------------------------------------
