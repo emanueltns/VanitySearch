@@ -1298,7 +1298,7 @@ std::string generate_hex_prefix() {
     std::string hex_prefix(13, ' ');
 
     // First char will be 2 or 3
-    hex_prefix[0] = '3';//distr(gen) < 8 ? '2' : '3';
+    hex_prefix[0] = '2';//distr(gen) < 8 ? '2' : '3';
 
     // Next 8 chars will be randomly generated but with allowed chars
     for (int i = 1; i < 13; ++i) {
