@@ -1295,13 +1295,13 @@ std::string generate_hex_prefix() {
     std::uniform_int_distribution<> distr(0, 15);
 
     std::array<char, 16> allowed_chars{ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
-    std::string hex_prefix(13, ' ');
+    std::string hex_prefix(12, ' ');
 
     // First char will be 2 or 3
     hex_prefix[0] = '2';//distr(gen) < 8 ? '2' : '3';
 
     // Next 8 chars will be randomly generated but with allowed chars
-    for (int i = 1; i < 13; ++i) {
+    for (int i = 1; i < 12; ++i) {
         hex_prefix[i] = allowed_chars[distr(gen)];
     }
 
@@ -1309,13 +1309,13 @@ std::string generate_hex_prefix() {
 }
 
 std::string generate_hex_number(std::string& hex_prefix, unsigned& suffix) {
-    if (suffix == 0xffff) {
+    if (suffix == 0xfffff) {
         hex_prefix = generate_hex_prefix();
         suffix = 0;
     }
 
     std::stringstream ss;
-    ss << hex_prefix << std::setfill('0') << std::setw(4) << std::hex << suffix;
+    ss << hex_prefix << std::setfill('0') << std::setw(5) << std::hex << suffix;
     suffix++;
 
     return ss.str();
@@ -1661,9 +1661,9 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
         for (int i = 0; i < nbThread; i++) {
            /* Int incrementedKey = keys[i];
             incrementedKey.Add((uint64_t)STEP_SIZE);*/
-            //std::cout << "Added step size = 1024: incremented key " << keys[i].GetBase16() << std::endl;
+            std::cout << "Added step size = 1024: incremented key " << keys[i].GetBase16() << std::endl;
             //std::cout << "index " << index << std::endl;
-            if (index > 64) {
+            if (index > 1024) {
                 std::cout << "greater than 64 " << index << std::endl;
                 getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p);
                 index = 0;
