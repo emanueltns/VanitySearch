@@ -1661,7 +1661,7 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
         for (int i = 0; i < nbThread; i++) {
            /* Int incrementedKey = keys[i];
             incrementedKey.Add((uint64_t)STEP_SIZE);*/
-            std::cout << "Added step size = 1024: incremented key " << keys[i].GetBase16() << std::endl;
+            //std::cout << "Added step size = 1024: incremented key " << keys[i].GetBase16() << std::endl;
             //std::cout << "index " << index << std::endl;
             if (index > 1024) {
                 std::cout << "greater than 64 " << index << std::endl;
